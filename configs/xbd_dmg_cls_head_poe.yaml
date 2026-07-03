@@ -1,0 +1,63 @@
+model:
+  name: poe_fuse
+train:
+  kind: trio_multitask_head_only
+  dataset_key: xbd_dmg_cls
+  task: change_detection_classification
+  train_src_json: /data/TEOChatlas/train/instruct.json
+  src_json: /data/TEOChatlas/eval/xBD_Change_Detection_Classification.json
+  image_base:
+  - /data/TEOChatlas/eval
+  - /data/TEOChatlas/train
+  - /data/TEOChatlas
+  - /data
+  batch_size: 2
+  class_balanced: true
+  lr: 0.0005
+  weight_decay: 0.0001
+  seed: 42
+  num_workers: 2
+  wandb_group: poe_fuse_multitask_trunk_poe
+backbone:
+  image_size: 224
+  dinov3_repo_dir: models/dinov3_repo
+  dinov3_arch: dinov3_vit7b16
+  dinov3_weights: models/dinov3_vit7b16_pretrain_sat493m-a6675841.pth
+  dinov3_hidden_size: 4096
+  dinov3_n_tokens: 196
+  sam3_model_dir: models/facebook/sam3
+  sam3_hidden_size: 256
+  sam3_n_tokens: 200
+  gemma4_model_dir: models/google/gemma-4-E4B-it
+  gemma4_hidden_size: 2560
+  gemma4_n_image_tokens: 256
+  gemma4_image_token_id: 258880
+  dtype: bf16
+mamba3:
+  d_model: 1024
+  n_layers: 4
+  d_state: 128
+  expand: 2
+  headdim: 64
+  ngroups: 1
+  chunk_size: 64
+  is_mimo: false
+  is_outproj_norm: false
+  dropout: 0.0
+head:
+  kind: classifier
+  num_classes: 5
+  pool: mean
+fusion:
+  enabled: true
+  spatial_align: true
+  align_grid: 14
+  align_heads: 8
+  spatial_agreement: false
+  keep_change_tokens: true
+  cross_expert_gate: true
+  agreement_tokens: false
+  n_heads: 4
+  add_segment_embeddings: true
+  poe_fuse: true
+  poe_scale_init: 0.1

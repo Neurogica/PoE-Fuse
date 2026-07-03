@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Experiment artifacts (not part of the code release)
+feature_cache/
+checkpoints/
+results/
+runs/
+wandb/
+*.pt
+*.pth
+*.ckpt
+models/
+data/
+*.log

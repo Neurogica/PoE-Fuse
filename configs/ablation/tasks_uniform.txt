@@ -1,0 +1,4 @@
+# ablation arm: uniform (focal-on, seed-42 verification)
+s2_det:configs/ablation/uniform_s2_det.yaml:feature_cache/s2_det
+xbd_loc:configs/ablation/uniform_xbd_loc.yaml:feature_cache/xbd_loc
+xbd_dmg_cls:configs/ablation/uniform_xbd_dmg_cls.yaml:feature_cache/xbd_dmg_cls

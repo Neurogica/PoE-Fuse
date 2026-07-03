@@ -1,0 +1,7 @@
+# Shared-trunk + PoE-Fuse, with focal-CE on the dmg_cls head.
+# s2_det/xbd_loc identical to tasks_3_poe.txt (PoE, seg_pos_weight handles their
+# imbalance); only the classifier head adds cls_focal_gamma. Trunk signature
+# unchanged (focal is a HeadConfig field, not part of backbone/mamba3/fusion/mixer).
+xbd_dmg_cls:configs/xbd_dmg_cls_head_poe_focal.yaml:feature_cache/xbd_dmg_cls
+s2_det:configs/s2_seg_head_poe.yaml:feature_cache/s2_det
+xbd_loc:configs/xbd_loc_seg_head_poe.yaml:feature_cache/xbd_loc

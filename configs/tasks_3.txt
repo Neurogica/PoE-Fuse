@@ -1,0 +1,4 @@
+# Subset used by the first multitask trunk run (SRE excluded).
+xbd_dmg_cls:configs/xbd_dmg_cls_head.yaml:feature_cache/xbd_dmg_cls
+s2_det:configs/s2_seg_head.yaml:feature_cache/s2_det
+xbd_loc:configs/xbd_loc_seg_head.yaml:feature_cache/xbd_loc

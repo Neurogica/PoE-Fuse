@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poe-fuse"
+version = "0.1.0"
+description = "Precision-weighted Product-of-Experts fusion of frozen foundation-model features for multi-task remote-sensing change detection."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "numpy<2",
+    "pyyaml>=6",
+    "tqdm>=4.66",
+    "einops>=0.7",
+    "pillow>=10",
+    "opencv-python>=4.9",
+    "shapely>=2.0",
+    "mamba-ssm>=2.0",
+]
+
+[project.optional-dependencies]
+# Extracting features from raw imagery needs the three frozen foundation encoders.
+# DINOv3 and SAM 3 install from their upstream repositories (not on PyPI); see README.
+features = [
+    "transformers>=4.40",
+    "timm>=1.0",
+    "huggingface-hub>=0.24",
+    "sentencepiece>=0.1.99",
+    "accelerate>=0.30",
+    "safetensors>=0.4",
+]
+dev = ["ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["poe_fuse*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
