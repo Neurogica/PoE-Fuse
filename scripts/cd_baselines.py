@@ -3,17 +3,15 @@
 Why pure PyTorch + train-from-scratch: the TEOChat-cited specialists are
 FC-Siam-Diff (S2Looking change det.) and the xView2 U-Net baseline (xBD
 localization). Their official weights ship as old Keras / mmcv stacks that do
-not run on this Blackwell (sm_120) GPU. We instead reimplement the standard
-architectures and train on the TEOChatlas train split, then evaluate on the
-eval split, emitting predictions in the SAME response-JSON schema as
-scripts/teochat_infer_local.py so scripts/rescore_teochat.py scores every
-baseline identically (per-pixel F1 over 256x256 masks).
+not run on recent GPUs. We instead reimplement the standard architectures and
+train on the TEOChatlas train split, then evaluate on the eval split, scoring
+every baseline identically (per-pixel F1 over 256x256 masks).
 
 Ground truth for training is rasterised from the answer bounding boxes (the
 train split has empty polygon fields), in the same [0,100]-normalised frame
 the scorer uses. Multi-seed training gives the mean +/- std the paper lacks.
 
-    .venv/bin/python scripts/specialists/cd_specialist.py \
+    python scripts/cd_baselines.py \
         --task s2_det --arch fc_siam_diff --seed 0 --epochs 15 --batch-size 16 \
         --out-dir results/specialists/s2_det
 """

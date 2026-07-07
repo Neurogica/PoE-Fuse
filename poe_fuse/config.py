@@ -6,7 +6,7 @@ extracts the penultimate hidden representation from each, per-branch
 linear-projects to ``d_s``, sequence-concats them, then runs a Mamba-3 stack
 across the resulting token stream.
 
-The four target tasks (s2_det / xbd_dmg_cls / xbd_loc / s2looking_sre) all
+The three target tasks (s2_det / xbd_dmg_cls / xbd_loc) all
 remain image-pair tasks: ``T=2`` images per sample produce two of these token
 blocks which are concatenated along the sequence axis before the Mamba-3
 stack.
@@ -90,11 +90,11 @@ class Mamba3StackConfig:
 
 @dataclass
 class FusionConfig:
-    """Cross-Expert Change-Agreement (CECA) fusion over the frozen trio.
+    """Cross-expert change fusion over the frozen trio.
 
     The frozen experts produce *heterogeneous* bi-temporal features (DINOv3
     geometry patches, SAM 3 detection queries, Gemma-4 semantic soft tokens).
-    Rather than naively concatenating both time steps, CECA turns the trio
+    Rather than naively concatenating both time steps, this module turns the trio
     into a change detector by:
 
     1. (internal) forming per-expert bi-temporal *difference* tokens

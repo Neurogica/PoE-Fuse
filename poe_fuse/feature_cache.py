@@ -5,7 +5,7 @@ their penultimate features for a given image never change.  Re-running them
 every epoch dominates training cost, so we precompute them **once** and cache
 them to disk; the cheap trainable part (per-branch ``Linear`` + Mamba-3 +
 head) then trains on the cached tensors.  This is the central enabler that
-makes the 4-task TerraFuse plan fit a single GPU / short timeline.
+makes the multi-task PoE-Fuse plan fit a single GPU / short timeline.
 
 Layout::
 

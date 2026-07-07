@@ -21,6 +21,10 @@ uv pip install -e .            # core (train / evaluate on cached features)
 uv pip install -e ".[features]"  # + extracting features from raw imagery
 ```
 
+Requires Linux with an NVIDIA GPU and the CUDA toolkit: the `mamba-ssm`
+dependency builds CUDA extensions at install time and does not build on
+CPU-only or macOS machines.
+
 Extracting features from raw imagery additionally requires the three frozen
 encoders. The vision ViT and segmentation model install from their upstream
 repositories (not on PyPI); the vision-language encoder loads via `transformers`.
@@ -41,7 +45,7 @@ python scripts/train_multitask.py \
     --out results.json --ckpt checkpoint.pt
 
 # 3. Evaluate a checkpoint
-python scripts/eval_multitask.py --tasks-file configs/tasks_3_poe_focal.txt --ckpt checkpoint.pt
+python scripts/eval_multitask.py --tasks-file configs/tasks_3_poe_focal.txt --checkpoint checkpoint.pt
 
 # 4. Specialist change-detection baselines (from scratch)
 python scripts/cd_baselines.py --task s2_det --arch fc_siam_diff --seed 0

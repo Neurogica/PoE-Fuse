@@ -1,4 +1,4 @@
-"""Cross-Expert Change-Agreement (CECA) fusion.
+"""Cross-expert change fusion.
 
 This module is the trainable heart of the change-detection variant of the
 PoEFuse codec.  It consumes the *per-expert, per-timestep* projected tokens
@@ -20,8 +20,8 @@ What it produces (``forward`` returns ``(tokens, token_mask)``):
   optional ``|D_e|`` (the cheap "explicit difference" path -- treated as an
   internal mechanism, not the headline);
 * a learned per-expert **change gate** computed from a *cross-expert
-  attention* over each expert's pooled change summary (the headline CECA
-  mechanism: heterogeneous frozen experts corroborate each other's change
+  attention* over each expert's pooled change summary (the cross-expert
+  gate: heterogeneous frozen experts corroborate each other's change
   evidence); and
 * a handful of global **agreement tokens** (the refined cross-expert
   summaries) prepended to the sequence.

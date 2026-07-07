@@ -7,8 +7,8 @@ Image-pair pipeline (T=2 by default):
                         + per-branch Linear -> Mamba3 stack)
         -> PoEFuse       (codec + task head)
 
-Heads cover the four target tasks: ClassifierHead (xbd_dmg_cls),
-BBoxGridHead (s2_det / xbd_loc), TextDecoderHead (s2looking_sre).
+Heads cover the three target tasks: ClassifierHead (xbd_dmg_cls),
+BBoxGridHead (s2_det / xbd_loc).
 """
 
 from .config import (
