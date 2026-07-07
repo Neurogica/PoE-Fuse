@@ -9,8 +9,6 @@ Tasks:
 * ``s2_det``         -- grid-anchor bbox head; per-pixel F1 between the
                         rasterized prediction bboxes and the GT polygons.
 * ``xbd_loc``        -- same per-pixel F1 metric as ``s2_det``.
-* ``s2looking_sre``  -- char-level text decoder; per-pixel F1 from bbox
-                        strings parsed out of the generated text.
 
 All eval-side scoring is delegated to the vendored official TEOChat
 evaluator (:mod:`teochat_eval`), which is a byte-for-byte copy of
@@ -63,7 +61,6 @@ from poe_fuse import (
     MixerConfig,
     PoEFuse,
     PoEFuseConfig,
-    ReferringSegHead,
     TrioBackboneConfig,
     cached_collate,
     features_to_device,
@@ -98,13 +95,9 @@ def _label_kind(head_kind: str) -> str:
     return {
         "classifier": "cls",
         "bbox_grid": "bbox",
-        "text_decoder": "text",
         # The dense change-segmentation head reuses the bbox cache (it carries
         # the GT change polygons) and rasterises masks from them on the fly.
         "change_seg": "bbox",
-        # The referring-seg head runs on the SRE cache (label_kind "text") and
-        # rasterises the GT referent polygon (empty -> all-zero mask).
-        "referring_seg": "text",
         "gemma_qa": "text",
     }[head_kind]
 
@@ -159,108 +152,16 @@ def _parse_boxes_from_text(text: str) -> list[list[float]]:
     return boxes
 
 
-def _filter_sre_eval(eval_ds: Any, train_cfg: dict[str, Any]) -> Any:
-    """Restrict the S2Looking SRE eval split to the official metric subset.
-
-    The ``S2Looking_SRE_QA.json`` eval file mixes two tasks:
-    ``spatial_referring_expression`` (bbox referents) and ``question_answering``
-    (Yes/No etc.).  TEOChat's ``detection_metrics`` groups by ``task`` and
-    reports ``spatial_referring_expression_f1`` over the SRE rows *only*; the QA
-    rows are scored separately as accuracy and are **not** part of the SRE F1.
-    Evaluating pixel-F1 over the full mixed set (as we did initially) is simply
-    the wrong denominator.  This filters the eval dataset to the SRE rows by
-    matching ``sample_id`` against the source JSON's ``task`` field.
-    """
-    if train_cfg.get("task") != "spatial_referring_expression":
-        return eval_ds
-    src = train_cfg.get("src_json")
-    if not src or not Path(str(src)).is_file():
-        print("[sre-eval-filter] src_json missing; eval NOT filtered", flush=True)
-        return eval_ds
-    rows = json.loads(Path(str(src)).read_text())
-    sre_ids = {str(r.get("id")) for r in rows if r.get("task") == "spatial_referring_expression"}
-    base = eval_ds.dataset if isinstance(eval_ds, Subset) else eval_ds
-    keep = [i for i in range(len(base)) if str(base[i].get("sample_id")) in sre_ids]
-    if not keep:
-        print("[sre-eval-filter] no SRE rows matched; eval NOT filtered", flush=True)
-        return eval_ds
-    print(
-        f"[sre-eval-filter] kept {len(keep)}/{len(base)} "
-        f"spatial_referring_expression rows (dropped QA rows)",
-        flush=True,
-    )
-    return Subset(base, keep)
-
-
-def _has_referent(sample: dict[str, Any]) -> bool:
-    """True when the sample carries a non-empty referent region."""
-    if sample.get("polygons"):
-        return True
-    if sample.get("bboxes"):
-        return True
-    return bool(_parse_boxes_from_text(str(sample.get("ground_truth") or "")))
-
-
-def _sre_referent_split(dataset: Any) -> tuple[list[int], list[int]]:
-    """Partition dataset indices into referent-present vs empty-GT."""
-    pos: list[int] = []
-    neg: list[int] = []
-    for i in range(len(dataset)):
-        if _has_referent(dataset[i]):
-            pos.append(i)
-        else:
-            neg.append(i)
-    return pos, neg
-
-
-class _SREBalancedBatchSampler:
-    """Yield balanced batches (half referent / half empty) for SRE training."""
-
-    def __init__(self, pos_idx: list[int], neg_idx: list[int], batch_size: int):
-        if not pos_idx or not neg_idx:
-            raise ValueError("balanced SRE sampler needs both referent and empty indices")
-        self.pos_idx = pos_idx
-        self.neg_idx = neg_idx
-        self.batch_size = batch_size
-        self.n_pos = batch_size // 2
-        self.n_neg = batch_size - self.n_pos
-
-    def __len__(self) -> int:
-        steps = max(
-            (len(self.pos_idx) + self.n_pos - 1) // self.n_pos,
-            (len(self.neg_idx) + self.n_neg - 1) // self.n_neg,
-        )
-        return steps
-
-    def __iter__(self):
-        import random
-
-        pos = self.pos_idx.copy()
-        neg = self.neg_idx.copy()
-        random.shuffle(pos)
-        random.shuffle(neg)
-        pi = ni = 0
-        for _ in range(len(self)):
-            batch: list[int] = []
-            for _ in range(self.n_pos):
-                batch.append(pos[pi % len(pos)])
-                pi += 1
-            for _ in range(self.n_neg):
-                batch.append(neg[ni % len(neg)])
-                ni += 1
-            yield batch
-
-
 def _seg_targets(batch: dict[str, Any], out_size: int, device: torch.device) -> torch.Tensor:
     """Build ``(B, out_size, out_size)`` 0/1 mask targets for a batch.
 
     Target geometry is taken from the first available source, in order:
 
-    1. GT **polygons** (change-seg eval splits, SRE eval referents);
+    1. GT **polygons** (change-seg eval splits);
     2. GT **bboxes** (s2_det / xbd_loc train carry boxes, not WKT polygons);
-    3. boxes **parsed from the ``ground_truth`` string** (SRE train/eval encode
-       the referent box as text like ``[83, 12, 100, 35].``; ``"No"`` / prose
-       answers yield an empty mask).
+    3. boxes **parsed from the ``ground_truth`` string** (referent boxes
+       encoded as text like ``[83, 12, 100, 35].``; ``"No"`` / prose answers
+       yield an empty mask).
 
     Sources are rasterised at 256 px then max-pooled to ``out_size`` so small
     footprints survive.
@@ -408,11 +309,8 @@ def _resolve_task_spec(train_cfg: dict[str, Any], head_kind: str) -> DatasetTask
     compatible = {spec.head_kind}
     if spec.head_kind == "bbox_grid":
         compatible.add("change_seg")
-    if spec.head_kind == "text_decoder":
-        compatible.add("referring_seg")
     if spec.head_kind == "classifier":
         compatible.add("gemma_qa")
-        compatible.add("text_decoder")
     if head_kind not in compatible:
         raise ValueError(
             f"dataset_key={key!r} expects head_kind={spec.head_kind!r} but the "
@@ -448,8 +346,7 @@ def _resolve_sam3_prompts(spec: DatasetTaskSpec, questions: list[str]) -> list[s
     """Pick the SAM 3 text prompt per sample.
 
     Detection tasks use the spec's short noun phrase (``"building"`` etc.);
-    the SRE task has an empty default so we fall back to the per-sample
-    referring expression itself.
+    specs with an empty default fall back to the per-sample question text.
     """
     default = spec.sam3_default_prompt or ""
     if default:
@@ -498,14 +395,6 @@ def _train_forward(
     if isinstance(model.head, ChangeSegHead):
         target = _seg_targets(batch, model.head.out_size, device)
         return model.head(codec_out["change_grid"], target_mask=target)
-    if isinstance(model.head, ReferringSegHead):
-        target = _seg_targets(batch, model.head.out_size, device)
-        return model.head(
-            codec_out["change_grid"],
-            text_tokens=codec_out["tokens"],
-            target_mask=target,
-            token_mask=codec_out["token_mask"],
-        )
     kind = batch["label_kind"]
     if kind == "cls":
         labels = batch["labels"].to(device, non_blocking=True)
@@ -544,7 +433,6 @@ def _run_eval_seg(
     prediction is a dense mask instead of grid boxes.
     """
     out_size = model.head.out_size
-    is_referring = isinstance(model.head, ReferringSegHead)
     evaluator = _PixelEvaluator(num_class=2)
     total_loss = 0.0
     total_n = 0
@@ -557,9 +445,8 @@ def _run_eval_seg(
                 codec_out = {**codec_out, "tokens": model.adapter(codec_out["tokens"])}
             token_mask = codec_out["token_mask"]
             head_in = codec_out["change_grid"]
-            text_kw = {"text_tokens": codec_out["tokens"]} if is_referring else {}
             target = _seg_targets(batch, out_size, device)
-            head_out = model.head(head_in, target_mask=target, token_mask=token_mask, **text_kw)
+            head_out = model.head(head_in, target_mask=target, token_mask=token_mask)
             total_loss += float(head_out["loss"].detach()) * len(batch_polys)
             total_n += len(batch_polys)
             pred = (
@@ -568,7 +455,6 @@ def _run_eval_seg(
                     eval_size=256,
                     threshold=cfg.head.seg_threshold,
                     token_mask=token_mask,
-                    **text_kw,
                 )
                 .cpu()
                 .numpy()
@@ -619,10 +505,10 @@ def _run_eval(
     """
     model.eval()
 
-    # Dense segmentation heads (change or referring): predicted mask vs
-    # rasterised GT mask, scored with the *same* per-pixel F1 (teochat
-    # ``Evaluator``) the bbox/text paths use.
-    if isinstance(model.head, (ChangeSegHead, ReferringSegHead)):
+    # Dense change-segmentation head: predicted mask vs rasterised GT mask,
+    # scored with the *same* per-pixel F1 (teochat ``Evaluator``) the
+    # bbox/text paths use.
+    if isinstance(model.head, ChangeSegHead):
         return _run_eval_seg(model, loader, device, cfg=cfg, spec=spec, from_cache=from_cache)
 
     kind = _label_kind(cfg.head.kind)
@@ -938,35 +824,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"closed-test: eval = train (n={len(train_idx)})", flush=True)
     else:
         eval_ds = eval_dataset
-        eval_ds = _filter_sre_eval(eval_ds, train_cfg)
 
     batch_size = int(train_cfg.get("batch_size", 4))
     num_workers = int(train_cfg.get("num_workers", 0))
-    use_sre_balance = train_cfg.get("task") == "spatial_referring_expression" and bool(
-        train_cfg.get("sre_balanced_batch", True)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
     )
-    if use_sre_balance:
-        pos_idx, neg_idx = _sre_referent_split(train_ds)
-        batch_sampler = _SREBalancedBatchSampler(pos_idx, neg_idx, batch_size)
-        train_loader = DataLoader(
-            train_ds,
-            batch_sampler=batch_sampler,
-            collate_fn=collate_fn,
-            num_workers=num_workers,
-        )
-        print(
-            f"[sre-train-balance] referent={len(pos_idx)} empty={len(neg_idx)} "
-            f"batch={batch_size} ({batch_size // 2}+{batch_size - batch_size // 2})",
-            flush=True,
-        )
-    else:
-        train_loader = DataLoader(
-            train_ds,
-            batch_size=batch_size,
-            shuffle=True,
-            collate_fn=collate_fn,
-            num_workers=num_workers,
-        )
     eval_loader = DataLoader(
         eval_ds,
         batch_size=batch_size,
@@ -991,16 +858,6 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    if isinstance(model.head, ReferringSegHead):
-        pos_idx, neg_idx = _sre_referent_split(train_ds)
-        pw = float(cfg.head.seg_presence_pos_weight)
-        if pw <= 0:
-            pw = 1.0 if use_sre_balance else len(neg_idx) / max(1, len(pos_idx))
-        model.head.set_presence_pos_weight(pw)
-        print(
-            f"[sre-presence] pos_weight={pw:.3f} (empty={len(neg_idx)} referent={len(pos_idx)})",
-            flush=True,
-        )
 
     # xBD damage classification is heavily skewed to "no damage"; without
     # re-weighting the classifier collapses to the majority class (the

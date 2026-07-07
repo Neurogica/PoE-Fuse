@@ -1,7 +1,6 @@
-"""Dataset task registry for the four leaderboard targets.
+"""Dataset task registry for the three leaderboard targets.
 
-only ``s2_det``,
-``xbd_dmg_cls``, ``xbd_loc`` and ``s2looking_sre`` are in scope.
+Only ``s2_det``, ``xbd_dmg_cls`` and ``xbd_loc`` are in scope.
 
 Earlier revisions of this file shipped a wide ``DatasetTaskSpec`` table
 covering fMoW / UCMerced / QFabric / MP4 motion-vector caches; all of
@@ -24,7 +23,7 @@ DEFAULT_TEOCHATLAS_TRAIN_JSON = Path("/data/TEOChatlas/train/instruct.json")
 
 @dataclass(frozen=True)
 class DatasetTaskSpec:
-    """Routing record for one of the four leaderboard tasks.
+    """Routing record for one of the three leaderboard tasks.
 
     Attributes:
         key:                stable identifier used throughout the codebase
@@ -50,10 +49,9 @@ class DatasetTaskSpec:
                             ``task`` field is also matched against
                             ``self.task``.
         sam3_default_prompt: short noun phrase fed to SAM 3 as the text
-                            prompt for every sample of this task.  For
-                            ``s2looking_sre`` we use an empty string which
-                            tells the PoEFuse pipeline to fall back to the
-                            sample's own ``question`` field (the SRE text).
+                            prompt for every sample of this task.  An empty
+                            string tells the PoEFuse pipeline to fall back
+                            to the sample's own ``question`` field.
     """
 
     key: str
@@ -68,9 +66,9 @@ class DatasetTaskSpec:
     default_config: Path
     train_filter_dataset: str
     sam3_default_prompt: str
-    # Eval scorer: "detection" routes through teochat detection_metrics (the
-    # four change tasks); "classification" uses exact-match accuracy
-    # (teochat classification_metrics) for scene classification (fMoW).
+    # Eval scorer: "detection" routes through teochat detection_metrics;
+    # "classification" uses exact-match accuracy (teochat
+    # classification_metrics).
     eval_scorer: str = "detection"
     # Classification label vocabulary (see poe_fuse.data.CLS_VOCABS).
     cls_vocab: str = "xbd_damage"
@@ -124,121 +122,6 @@ TASK_SPECS: tuple[DatasetTaskSpec, ...] = (
         default_config=Path("configs/poe_fuse/xbd_loc.yaml"),
         train_filter_dataset="xBD",
         sam3_default_prompt="building",
-    ),
-    DatasetTaskSpec(
-        key="s2looking_sre",
-        dataset="S2Looking SRE/QA",
-        task="spatial_referring_expression",
-        metric="spatial_referring_expression_f1",
-        eval_dataset_name="s2_sre_qa",
-        score_column="s2looking_sre",
-        head_kind="text_decoder",
-        label_kind="text",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "S2Looking_SRE_QA.json",
-        default_config=Path("configs/poe_fuse/s2looking_sre.yaml"),
-        train_filter_dataset="S2Looking",
-        sam3_default_prompt="",
-    ),
-    # fMoW multi-temporal scene classification (T>=1, up to 8 frames).  Used
-    # to show the shared trunk generalises beyond bitemporal change and that
-    # the linear-time SSM mixer handles longer temporal sequences.
-    DatasetTaskSpec(
-        key="fmow_hr",
-        dataset="fMoW High-Res TSC",
-        task="scene_classification",
-        metric="scene_classification_accuracy",
-        eval_dataset_name="fmow_hr",
-        score_column="fmow_hr",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "fMoW_High_Res.json",
-        default_config=Path("configs/poe_fuse/fmow_hr.yaml"),
-        train_filter_dataset="fMoW",
-        sam3_default_prompt="",
-        eval_scorer="classification",
-        cls_vocab="fmow_scene",
-        min_frames=1,
-    ),
-    # --- Extended tasks (TEOChat Table 1/3/5) for broader comparison ---
-    DatasetTaskSpec(
-        key="abcd",
-        dataset="ABCD",
-        task="change_question_answering",
-        metric="change_question_answering_accuracy",
-        eval_dataset_name="abcd",
-        score_column="abcd",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "ABCD.json",
-        default_config=Path("configs/poe_fuse/abcd.yaml"),
-        train_filter_dataset="ABCD",
-        sam3_default_prompt="building",
-        eval_scorer="classification",
-        cls_vocab="abcd",
-    ),
-    DatasetTaskSpec(
-        key="cdvqa",
-        dataset="CDVQA",
-        task="change_question_answering",
-        metric="change_question_answering_accuracy",
-        eval_dataset_name="cdvqa",
-        score_column="cdvqa",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "CDVQA.json",
-        default_config=Path("configs/poe_fuse/cdvqa.yaml"),
-        train_filter_dataset="CDVQA",
-        sam3_default_prompt="change",
-        eval_scorer="classification",
-        cls_vocab="cdvqa",
-    ),
-    DatasetTaskSpec(
-        key="xbd_qa",
-        dataset="xBD QA",
-        task="question_answering",
-        metric="question_answering_accuracy",
-        eval_dataset_name="xbd_qa",
-        score_column="xbd_qa",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "xBD_SRE_QA_RQA.json",
-        default_config=Path("configs/poe_fuse/xbd_qa.yaml"),
-        train_filter_dataset="xBD",
-        sam3_default_prompt="damaged building",
-        eval_scorer="classification",
-        cls_vocab="xbd_qa",
-    ),
-    DatasetTaskSpec(
-        key="xbd_rqa",
-        dataset="xBD RQA",
-        task="region_based_question_answering",
-        metric="region_based_question_answering_accuracy",
-        eval_dataset_name="xbd_rqa",
-        score_column="xbd_rqa",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "xBD_SRE_QA_RQA.json",
-        default_config=Path("configs/poe_fuse/xbd_rqa.yaml"),
-        train_filter_dataset="xBD",
-        sam3_default_prompt="damaged building",
-        eval_scorer="classification",
-        cls_vocab="yes_no_dot",
-    ),
-    DatasetTaskSpec(
-        key="s2l_rqa",
-        dataset="S2Looking RQA",
-        task="region_based_question_answering",
-        metric="region_based_question_answering_accuracy",
-        eval_dataset_name="s2l_rqa",
-        score_column="s2l_rqa",
-        head_kind="classifier",
-        label_kind="cls",
-        eval_json=DEFAULT_TEOCHATLAS_EVAL_DIR / "S2Looking_RQA.json",
-        default_config=Path("configs/poe_fuse/s2l_rqa.yaml"),
-        train_filter_dataset="S2Looking",
-        sam3_default_prompt="building",
-        eval_scorer="classification",
-        cls_vocab="yes_no",
     ),
 )
 

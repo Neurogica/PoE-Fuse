@@ -1,11 +1,10 @@
 """Task-specific prediction heads on top of PoEFuse visual tokens.
 
-Three heads cover the four target tasks ():
+These heads cover the three target tasks:
 
 * ``ClassifierHead``      -- xbd_dmg_cls   (5-way classification).
 * ``BBoxGridHead``        -- s2_det / xbd_loc (1-stage anchor detector).
-* ``TextDecoderHead``     -- s2looking_sre (char-level autoregressive
-                              text generation, also covers Yes/No QA).
+* ``ChangeSegHead``       -- s2_det / xbd_loc (dense change segmentation).
 
 All heads share the same input contract: ``tokens`` is the codec output
 ``(B, L_vis, d_model)``.  They emit their own loss when ``labels`` are
@@ -281,106 +280,6 @@ class BBoxGridHead(nn.Module):
         return results
 
 
-class TextDecoderHead(nn.Module):
-    """Character-level autoregressive decoder cross-attending over visual tokens.
-
-    Vocab is fixed (``TEXT_VOCAB``): ``<pad>``, ``<bos>``, ``<eos>`` and
-    Python's ``string.printable`` (=> 103 ids).  Training uses teacher
-    forcing on the gold answer string; inference greedy-decodes up to
-    ``max_len`` tokens.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        *,
-        vocab_size: int,
-        max_len: int,
-        num_layers: int,
-        num_heads: int,
-        dropout: float,
-    ):
-        super().__init__()
-        if vocab_size != TEXT_VOCAB_SIZE:
-            raise ValueError(
-                f"TextDecoderHead expects vocab_size={TEXT_VOCAB_SIZE} to match the fixed "
-                f"character vocab; got {vocab_size}"
-            )
-        self.d_model = d_model
-        self.max_len = max_len
-        self.tok_emb = nn.Embedding(vocab_size, d_model, padding_idx=PAD_ID)
-        self.pos_emb = nn.Parameter(torch.randn(1, max_len, d_model) * 0.02)
-        self.memory_norm = nn.LayerNorm(d_model)
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=d_model,
-            nhead=num_heads,
-            dim_feedforward=d_model * 4,
-            dropout=dropout,
-            batch_first=True,
-            norm_first=True,
-        )
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
-        self.norm = nn.LayerNorm(d_model)
-        self.fc = nn.Linear(d_model, vocab_size, bias=False)
-        nn.init.zeros_(self.fc.bias) if self.fc.bias is not None else None
-
-    def _decode_step(
-        self,
-        ids: Tensor,
-        memory: Tensor,
-        memory_key_padding_mask: Tensor | None,
-    ) -> Tensor:
-        T = ids.size(1)
-        emb = self.tok_emb(ids) + self.pos_emb[:, :T]
-        causal = torch.triu(torch.full((T, T), float("-inf"), device=ids.device), diagonal=1)
-        out = self.decoder(
-            tgt=emb,
-            memory=memory,
-            tgt_mask=causal,
-            memory_key_padding_mask=memory_key_padding_mask,
-        )
-        return self.fc(self.norm(out))
-
-    def forward(
-        self,
-        tokens: Tensor,
-        *,
-        text_ids: Tensor | None = None,
-        token_mask: Tensor | None = None,
-    ) -> dict:
-        memory = self.memory_norm(tokens)
-        memory_kpm = None if token_mask is None else ~token_mask.to(torch.bool)
-        if text_ids is None:
-            return {"memory": memory}
-        inputs = text_ids[:, :-1]
-        targets = text_ids[:, 1:]
-        logits = self._decode_step(inputs, memory, memory_kpm)
-        loss = F.cross_entropy(
-            logits.reshape(-1, logits.size(-1)),
-            targets.reshape(-1),
-            ignore_index=PAD_ID,
-        )
-        return {"loss": loss, "logits": logits}
-
-    @torch.inference_mode()
-    def generate(self, tokens: Tensor, *, token_mask: Tensor | None = None) -> list[str]:
-        memory = self.memory_norm(tokens)
-        memory_kpm = None if token_mask is None else ~token_mask.to(torch.bool)
-        B = tokens.size(0)
-        device = tokens.device
-        ids = torch.full((B, 1), BOS_ID, dtype=torch.long, device=device)
-        done = torch.zeros(B, dtype=torch.bool, device=device)
-        for _ in range(self.max_len - 1):
-            logits = self._decode_step(ids, memory, memory_kpm)
-            next_id = logits[:, -1].argmax(dim=-1)
-            next_id = torch.where(done, torch.full_like(next_id, PAD_ID), next_id)
-            ids = torch.cat([ids, next_id.unsqueeze(1)], dim=1)
-            done = done | (next_id == EOS_ID)
-            if bool(done.all()):
-                break
-        return [decode_text(ids[b].tolist()) for b in range(B)]
-
-
 class ChangeSegHead(nn.Module):
     """Dense change-segmentation head (native S2Looking task).
 
@@ -476,229 +375,6 @@ class ChangeSegHead(nn.Module):
         return (up.sigmoid() > threshold).to(torch.uint8)
 
 
-class ReferringSegHead(nn.Module):
-    """Referring-expression segmentation head (native S2Looking SRE task).
-
-    SRE must localise the region named by a *referring expression*.  Early
-    attempts that let an ``R x R`` grid of query cells freely cross-attend over
-    the unordered token stream could not localise at all -- with no spatial
-    inductive bias they collapse to a constant (all-positive) mask, even when
-    overfitting a handful of samples.
-
-    This head instead reuses the **conv-on-grid** recipe that makes
-    :class:`ChangeSegHead` learnable, and turns it into a *referring* decoder
-    by FiLM-conditioning the convolutional features on the referring
-    expression.  The spatial backbone is the codec's change field
-    ``(B, G, G, d)`` (spatially ordered, so a conv has a real spatial prior);
-    the text -- already encoded as question-conditioned Gemma soft tokens in
-    the codec token stream -- is attention-pooled to a single vector that
-    produces per-channel ``(gamma, beta)`` modulation.  The conv decoder then
-    predicts an ``R x R`` mask of the referred region.
-
-    A large share of SRE samples have *no* referent (ground truth ``"No"``);
-    those become all-zero masks, so the head naturally learns to emit an empty
-    mask when the expression matches nothing.  Scored with the same per-pixel
-    F1 (teochat ``Evaluator``) as the official ``evaluate_masks`` path.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        *,
-        out_size: int,
-        num_heads: int = 8,
-        num_layers: int = 2,
-        lambda_dice: float = 1.0,
-        pos_weight: float = 5.0,
-        hidden: int = 256,
-        lambda_presence: float = 1.0,
-        presence_threshold: float = 0.5,
-        presence_pos_weight: float = 1.0,
-        presence_source: str = "grid_stats",
-        tversky_beta: float = 0.0,
-    ):
-        super().__init__()
-        self.out_size = out_size
-        self.lambda_dice = lambda_dice
-        self.lambda_presence = lambda_presence
-        self.presence_threshold = presence_threshold
-        self.presence_source = presence_source
-        self.tversky_beta = tversky_beta
-        self.register_buffer("pos_weight", torch.tensor(float(pos_weight)))
-        self.register_buffer("presence_pos_weight", torch.tensor(float(presence_pos_weight)))
-        # Spatial backbone (conv-on-grid, identical recipe to ChangeSegHead).
-        self.grid_norm = nn.LayerNorm(d_model)
-        self.proj = nn.Conv2d(d_model, hidden, kernel_size=1)
-        # Referring-expression encoder: attention-pool the text-aware token
-        # stream into one vector, then FiLM-modulate the conv features by it.
-        # A heavier per-cell pixel<->text cross-attention was tried but
-        # overfits this small (~4k example) split, so a single global FiLM
-        # vector is kept -- it is the most reliable text-conditioning here.
-        self.text_norm = nn.LayerNorm(d_model)
-        self.text_query = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
-        self.text_attn = nn.MultiheadAttention(d_model, num_heads, batch_first=True)
-        self.film = nn.Sequential(
-            nn.Linear(d_model, hidden), nn.GELU(), nn.Linear(hidden, 2 * hidden)
-        )
-        body = []
-        for _ in range(max(1, num_layers)):
-            body += [
-                nn.Conv2d(hidden, hidden, kernel_size=3, padding=1),
-                nn.GroupNorm(8, hidden),
-                nn.GELU(),
-            ]
-        self.body = nn.Sequential(*body)
-        self.out_conv = nn.Conv2d(hidden, 1, kernel_size=1)
-        # Referent presence: ~50% of official SRE eval rows have empty GT
-        # ("no such building").  Two signal sources are supported:
-        #   - "grid_stats" (legacy): pooled text + global change magnitude.
-        #     The change magnitude is identical for present/empty GT, so this
-        #     collapses to "always present" and contributes no separation.
-        #   - "mask": pooled text + statistics of the *predicted mask logit*
-        #     (max, mean, positive-fraction).  The referent either produces a
-        #     confident localized region or it does not -- so the mask's own
-        #     peak is the right evidence for "does the referent exist".
-        presence_extra = 3
-        self.presence_head = nn.Sequential(
-            nn.Linear(d_model + presence_extra, hidden),
-            nn.GELU(),
-            nn.Linear(hidden, 1),
-        )
-
-    def set_presence_pos_weight(self, weight: float) -> None:
-        self.presence_pos_weight = torch.tensor(float(weight), device=self.pos_weight.device)
-
-    def _pool_text(self, text_tokens: Tensor, token_mask: Tensor | None) -> Tensor:
-        """Attention-pool the (text-aware) token stream to ``(B, d)``."""
-        mem = self.text_norm(text_tokens)
-        q = self.text_query.expand(mem.size(0), -1, -1)
-        kpm = None if token_mask is None else ~token_mask.to(torch.bool)
-        pooled, _ = self.text_attn(q, mem, mem, key_padding_mask=kpm, need_weights=False)
-        return pooled.squeeze(1)
-
-    @staticmethod
-    def _grid_change_stats(grid: Tensor) -> Tensor:
-        """``(B, G, G, d)`` -> ``(B, 3)`` magnitude summary (mean, max, top-fraction)."""
-        mag = grid.norm(dim=-1)
-        mean = mag.mean(dim=(1, 2))
-        mx = mag.amax(dim=(1, 2))
-        flat = mag.flatten(1)
-        q = torch.quantile(flat, 0.9, dim=1)
-        frac = (flat > q.unsqueeze(1)).float().mean(dim=1)
-        return torch.stack([mean, mx, frac], dim=1)
-
-    @staticmethod
-    def _mask_stats(logits: Tensor) -> Tensor:
-        """``(B, R, R)`` mask logits -> ``(B, 3)`` (max, mean, positive-fraction).
-
-        Evidence for "does the referent exist": a present referent yields a
-        confident localized peak; an absent one yields a flat low-prob field.
-        """
-        prob = logits.sigmoid()
-        flat = prob.flatten(1)
-        mx = flat.amax(dim=1)
-        mean = flat.mean(dim=1)
-        frac = (flat > 0.5).float().mean(dim=1)
-        return torch.stack([mx, mean, frac], dim=1)
-
-    def _presence_input(self, pooled: Tensor, grid: Tensor, logits: Tensor) -> Tensor:
-        if self.presence_source == "mask":
-            stats = self._mask_stats(logits)
-        else:
-            stats = self._grid_change_stats(grid)
-        return torch.cat([pooled, stats.to(pooled.dtype)], dim=-1)
-
-    def _predict(self, grid: Tensor, text_tokens: Tensor, token_mask: Tensor | None) -> Tensor:
-        """``grid`` ``(B, G, G, d)`` + text -> ``(B, R, R)`` referred logits."""
-        x = self.grid_norm(grid).permute(0, 3, 1, 2).contiguous()  # (B, d, G, G)
-        x = self.proj(x)
-        # FiLM-condition on the referring text at the native (coarse) grid.
-        t = self._pool_text(text_tokens, token_mask)  # (B, d)
-        gamma, beta = self.film(t).chunk(2, dim=-1)  # (B, hidden) each
-        x = x * (1.0 + gamma[:, :, None, None]) + beta[:, :, None, None]
-        if x.shape[-1] != self.out_size:
-            x = F.interpolate(
-                x, size=(self.out_size, self.out_size), mode="bilinear", align_corners=False
-            )
-        x = self.body(x)
-        return self.out_conv(x).squeeze(1)  # (B, R, R)
-
-    def forward(
-        self,
-        grid: Tensor,
-        *,
-        text_tokens: Tensor | None = None,
-        target_mask: Tensor | None = None,
-        token_mask: Tensor | None = None,
-        **_ignore,
-    ) -> dict:
-        if text_tokens is None:
-            text_tokens = grid.flatten(1, 2)  # fall back to the grid as text-free memory
-        pooled = self._pool_text(text_tokens, token_mask)  # (B, d)
-        logits = self._predict(grid, text_tokens, token_mask)
-        presence_in = self._presence_input(pooled, grid, logits)
-        presence_logit = self.presence_head(presence_in).squeeze(-1)  # (B,)
-        out: dict = {"mask_logits": logits, "presence_logit": presence_logit}
-        if target_mask is None:
-            return out
-        target = target_mask.to(logits.dtype)
-        present_f = (target.flatten(1).sum(dim=1) > 0).to(logits.dtype)
-        pw = self.presence_pos_weight.to(logits.dtype)
-        presence = F.binary_cross_entropy_with_logits(presence_logit, present_f, pos_weight=pw)
-        bce = F.binary_cross_entropy_with_logits(
-            logits, target, pos_weight=self.pos_weight.to(logits.dtype)
-        )
-        prob = logits.sigmoid()
-        dims = (1, 2)
-        if self.tversky_beta > 0:
-            # Tversky: TP / (TP + alpha*FN + beta*FP).  beta>0.5 penalises
-            # false-positives more, curbing the 2x over-prediction that forces
-            # a high binarization threshold at eval.
-            beta = self.tversky_beta
-            alpha = 1.0 - beta
-            tp = (prob * target).sum(dim=dims)
-            fp = (prob * (1.0 - target)).sum(dim=dims)
-            fn = ((1.0 - prob) * target).sum(dim=dims)
-            tversky = 1.0 - ((tp + 1.0) / (tp + alpha * fn + beta * fp + 1.0)).mean()
-            region = tversky
-            out["loss_dice"] = tversky.detach()
-        else:
-            inter = (prob * target).sum(dim=dims)
-            denom = prob.sum(dim=dims) + target.sum(dim=dims)
-            dice = 1.0 - ((2 * inter + 1.0) / (denom + 1.0)).mean()
-            region = dice
-            out["loss_dice"] = dice.detach()
-        out["loss"] = bce + self.lambda_dice * region + self.lambda_presence * presence
-        out["loss_bce"] = bce.detach()
-        out["loss_presence"] = presence.detach()
-        return out
-
-    @torch.inference_mode()
-    def decode(
-        self,
-        grid: Tensor,
-        *,
-        text_tokens: Tensor | None = None,
-        eval_size: int = 256,
-        threshold: float = 0.5,
-        token_mask: Tensor | None = None,
-        **_ignore,
-    ) -> Tensor:
-        if text_tokens is None:
-            text_tokens = grid.flatten(1, 2)
-        pooled = self._pool_text(text_tokens, token_mask)
-        logits = self._predict(grid, text_tokens, token_mask)
-        presence_in = self._presence_input(pooled, grid, logits)
-        presence = self.presence_head(presence_in).squeeze(-1).sigmoid()  # (B,)
-        up = F.interpolate(
-            logits.unsqueeze(1), size=(eval_size, eval_size), mode="bilinear", align_corners=False
-        ).squeeze(1)
-        mask = (up.sigmoid() > threshold).to(torch.uint8)
-        # Gate: drop the whole mask when no referent is predicted present.
-        gate = (presence > self.presence_threshold).to(torch.uint8)
-        return mask * gate[:, None, None]
-
-
 def build_head(cfg: HeadConfig, *, d_model: int) -> nn.Module:
     if cfg.kind == "classifier":
         return ClassifierHead(
@@ -716,15 +392,6 @@ def build_head(cfg: HeadConfig, *, d_model: int) -> nn.Module:
             focal_alpha=cfg.bbox_focal_alpha,
             focal_gamma=cfg.bbox_focal_gamma,
         )
-    if cfg.kind == "text_decoder":
-        return TextDecoderHead(
-            d_model,
-            vocab_size=cfg.text_vocab_size,
-            max_len=cfg.text_max_len,
-            num_layers=cfg.text_num_layers,
-            num_heads=cfg.text_num_heads,
-            dropout=cfg.text_dropout,
-        )
     if cfg.kind == "change_seg":
         return ChangeSegHead(
             d_model,
@@ -733,20 +400,6 @@ def build_head(cfg: HeadConfig, *, d_model: int) -> nn.Module:
             num_layers=cfg.seg_num_layers,
             lambda_dice=cfg.seg_lambda_dice,
             pos_weight=cfg.seg_pos_weight,
-        )
-    if cfg.kind == "referring_seg":
-        return ReferringSegHead(
-            d_model,
-            out_size=cfg.seg_out_size,
-            num_heads=cfg.seg_heads,
-            num_layers=cfg.seg_num_layers,
-            lambda_dice=cfg.seg_lambda_dice,
-            pos_weight=cfg.seg_pos_weight,
-            lambda_presence=cfg.seg_lambda_presence,
-            presence_threshold=cfg.seg_presence_threshold,
-            presence_pos_weight=cfg.seg_presence_pos_weight,
-            presence_source=cfg.seg_presence_source,
-            tversky_beta=cfg.seg_tversky_beta,
         )
     if cfg.kind == "gemma_qa":
         return GemmaQADecoderHead(
@@ -929,11 +582,9 @@ __all__ = [
     "EOS_ID",
     "GemmaQADecoderHead",
     "PAD_ID",
-    "ReferringSegHead",
     "TaskAdapter",
     "TEXT_VOCAB",
     "TEXT_VOCAB_SIZE",
-    "TextDecoderHead",
     "build_head",
     "decode_text",
     "encode_text",

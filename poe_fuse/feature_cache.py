@@ -142,7 +142,7 @@ class CachedTrioDataset(Dataset):
     """Read a split directory written by :func:`write_split_cache`.
 
     ``override_label_kind`` lets a cls-cached dataset serve as text-labelled
-    data (e.g. QA tasks trained with a TextDecoderHead instead of a classifier).
+    data (e.g. QA tasks trained with a text head instead of a classifier).
     The ground_truth string is converted to text_ids on the fly in collate.
     """
 

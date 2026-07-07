@@ -278,9 +278,7 @@ class MixerConfig:
         return self.n_layers if self.n_layers > 0 else MIXER_DEFAULT_LAYERS[self.kind]
 
 
-HeadKind = Literal[
-    "classifier", "bbox_grid", "text_decoder", "change_seg", "referring_seg", "gemma_qa"
-]
+HeadKind = Literal["classifier", "bbox_grid", "change_seg", "gemma_qa"]
 
 
 @dataclass
@@ -311,19 +309,6 @@ class HeadConfig:
     seg_lambda_dice: float = 1.0  # weight of the soft-Dice term (vs BCE)
     seg_pos_weight: float = 5.0  # BCE positive (change) weight; change is rare
     seg_threshold: float = 0.5  # sigmoid cut at eval time
-    seg_lambda_presence: float = 1.0  # referring_seg: weight of referent-present loss
-    seg_presence_threshold: float = 0.5  # referring_seg: gate cut for emitting a mask
-    seg_presence_pos_weight: float = 1.0  # referring_seg: BCE weight for referent-present class
-    # referring_seg presence signal: "grid_stats" (legacy; global change
-    # magnitude, cannot separate referent presence) or "mask" (derive presence
-    # from the predicted mask's own peak/mean logit -- the referent either has
-    # a confident region or it does not).
-    seg_presence_source: str = "grid_stats"
-    # Tversky loss for the mask: penalises false-positives (over-prediction)
-    # harder than dice.  Used when ``seg_tversky_beta > 0``; beta is the FP
-    # weight (alpha = 1 - beta).  beta>0.5 sharpens masks (less over-spread).
-    seg_tversky_beta: float = 0.0
-
     text_vocab_size: int = 103
     text_max_len: int = 96
     text_num_layers: int = 2

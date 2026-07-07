@@ -22,7 +22,6 @@ from .config import (
 from .data import (
     CLS_VOCABS,
     DEFAULT_IMAGE_BASE_CANDIDATES,
-    FMOW_SCENE_LABELS,
     XBD_DAMAGE_LABELS,
     ImagePairDataset,
     format_bbox_list,
@@ -35,17 +34,15 @@ from .feature_cache import (
     write_split_cache,
 )
 from .fusion import CrossExpertChangeFusion, SpatialChangeAgreementFusion
-from .heads import ChangeSegHead, ReferringSegHead
+from .heads import ChangeSegHead
 from .model import PoEFuse
 
 __all__ = [
     "CLS_VOCABS",
     "CachedTrioDataset",
     "ChangeSegHead",
-    "ReferringSegHead",
     "CrossExpertChangeFusion",
     "DEFAULT_IMAGE_BASE_CANDIDATES",
-    "FMOW_SCENE_LABELS",
     "FusionConfig",
     "SpatialChangeAgreementFusion",
     "HeadConfig",

@@ -7,8 +7,6 @@ image model + Gemma-4-E4B-it LM) and a single task head selected by
 * ``classifier``    -> 5-way xBD damage classifier (returns ``logits``).
 * ``bbox_grid``     -> grid-anchor detector (returns ``obj_logits`` and
                        ``bbox_pred`` in TEOChatlas 0-100 coordinates).
-* ``text_decoder``  -> autoregressive char-level decoder
-                       (training: returns ``loss``; inference: ``generate``).
 
 The forward signature is
 ``forward(images, questions, sam3_prompts, **task_inputs)``.  The two text
@@ -30,7 +28,6 @@ from .heads import (
     BBoxGridHead,
     ClassifierHead,
     GemmaQADecoderHead,
-    TextDecoderHead,
     build_head,
 )
 
@@ -68,8 +65,6 @@ class PoEFuse(nn.Module):
             if bbox_targets is not None:
                 targets = [[tuple(b) for b in sample] for sample in bbox_targets]
             return self.head(tokens, bbox_targets=targets, token_mask=token_mask)
-        if isinstance(self.head, TextDecoderHead):
-            return self.head(tokens, text_ids=text_ids, token_mask=token_mask)
         if isinstance(self.head, GemmaQADecoderHead):
             return self.head(tokens, text_ids=text_ids, token_mask=token_mask)
         raise TypeError(f"unsupported head type: {type(self.head).__name__}")

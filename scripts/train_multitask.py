@@ -43,7 +43,6 @@ from poe_fuse.heads import TaskAdapter  # noqa: E402
 from poe_fuse.train import (  # noqa: E402
     _build_poe_fuse_config,
     _class_weights,
-    _filter_sre_eval,
     _label_kind,
     _resolve_task_spec,
     _run_eval,
@@ -97,7 +96,6 @@ def _build_bundle(key: str, config: Path, cache: Path, device: torch.device) -> 
     cache_lk_kwarg = {"override_label_kind": label_kind} if override_lk else {}
     train_ds = CachedTrioDataset(cache / "train", **cache_lk_kwarg)
     eval_ds = CachedTrioDataset(cache / "eval", **cache_lk_kwarg)
-    eval_ds = _filter_sre_eval(eval_ds, train_cfg)
 
     bs = int(train_cfg.get("batch_size", 8))
     nw = int(train_cfg.get("num_workers", 2))
@@ -130,13 +128,6 @@ def _build_bundle(key: str, config: Path, cache: Path, device: torch.device) -> 
         weights = _class_weights(train_ds, num_classes=model.head.num_classes)
         if weights is not None:
             model.head.set_class_weights(weights.to(device))
-
-    from poe_fuse.heads import ReferringSegHead  # noqa: WPS433
-
-    if isinstance(model.head, ReferringSegHead):
-        pw = float(cfg.head.seg_presence_pos_weight)
-        if pw > 0:
-            model.head.set_presence_pos_weight(pw)
 
     return TaskBundle(
         key=key,

@@ -9,7 +9,7 @@ sample, ``T_i >= 2``) plus a task-shaped label:
 * ``label_kind="bbox"``  -- ``bboxes: list[[x1, y1, x2, y2]]`` in 0-100
                               TEOChatlas coordinates (S2Looking / xBD loc).
 * ``label_kind="text"``  -- ``text_ids: list[int]`` already padded to
-                              ``HeadConfig.text_max_len`` (SRE / Yes-No).
+                              ``HeadConfig.text_max_len`` (Yes/No QA).
 
 The dataset is intentionally cache-free: PIL load + resize is cheap
 compared to the dual vision encoder forward pass.  See
@@ -261,7 +261,7 @@ def sanitize_bbox_response(text: str) -> str:
     The vendored TEOChat evaluator (``teochat_eval.detection.evaluate_masks``)
     assumes every bracketed group inside a response is a 4-tuple bbox and
     crashes with ``IndexError`` on shorter / non-numeric brackets that the
-    character-level :class:`TextDecoderHead` can emit early in training.
+    a character-level text decoder can emit early in training.
     """
 
     def _keep(m: re.Match[str]) -> str:
