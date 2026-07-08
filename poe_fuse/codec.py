@@ -8,7 +8,7 @@ a single token stream ``(B, L_vis, d_s)`` plus a matching boolean
 
 The forward path is split into two stages so the expensive frozen part can
 be **precomputed once and cached to disk** (see ``feature_cache.py`` and
-``scripts/cache_trio_features.py``):
+``scripts/cache_features.py``):
 
 * :meth:`PoEFuseCodec.encode_backbones` -- runs the three frozen foundation
   models (DINOv3 ViT-7B/16, SAM 3 image model, Gemma-4-E4B-it) and returns

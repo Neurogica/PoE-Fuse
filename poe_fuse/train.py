@@ -20,7 +20,7 @@ The head is selected by ``head.kind`` in the YAML config; the dataset's
 
 Usage::
 
-    uv run src/train.py --config configs/poe_fuse/<task>.yaml
+    uv run scripts/train_multitask.py --tasks-file configs/tasks_3_poe_focal.txt
 
 Early stopping is on by default: if ``eval_loss`` does not improve for
 ``train.early_stop_patience`` consecutive epochs (default 5) the loop
@@ -680,7 +680,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Train on pre-computed frozen-backbone features instead of raw "
             "images.  Expects <dir>/train and <dir>/eval written by "
-            "scripts/cache_trio_features.py.  The heavy backbones are NOT "
+            "scripts/cache_features.py.  The heavy backbones are NOT "
             "built in this mode (only the trainable mix + head)."
         ),
     )

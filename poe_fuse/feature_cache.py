@@ -31,7 +31,7 @@ Each ``<idx>.pt`` holds one sample::
     }
 
 ``CachedTrioDataset`` + :func:`cached_collate` reproduce the batch contract
-that :func:`src.train._collate` emits, except the heavy ``images`` tensor is
+that :func:`poe_fuse.train._collate` emits, except the heavy ``images`` tensor is
 replaced by a per-branch ``features`` dict consumed by
 :meth:`PoEFuseCodec.mix` / :meth:`PoEFuse.forward_features`.
 """
@@ -69,11 +69,11 @@ def write_split_cache(
 
     Args:
         codec: a :class:`PoEFuseCodec` built with ``build_backbones=True``.
-        loader: a ``DataLoader`` yielding ``src.train._collate`` batches.
+        loader: a ``DataLoader`` yielding ``poe_fuse.train._collate`` batches.
         spec: the :class:`DatasetTaskSpec` (for SAM 3 prompt + label kind).
         out_dir: ``<cache_dir>/<split>`` directory (created if missing).
         resolve_sam3_prompts: callable ``(spec, questions) -> list[str]``
-            (reuse ``src.train._resolve_sam3_prompts`` to stay consistent).
+            (reuse ``poe_fuse.train._resolve_sam3_prompts`` to stay consistent).
         store_dtype: dtype features are cast to before saving (fp16 default).
 
     Returns the manifest dict (also written to ``out_dir/manifest.json``).
@@ -179,7 +179,7 @@ class CachedTrioDataset(Dataset):
 def cached_collate(batch: list[dict[str, Any]]) -> dict[str, Any]:
     """Collate cached samples into a batch consumed by ``PoEFuse.forward_features``.
 
-    Mirrors ``src.train._collate`` but carries a per-branch ``features`` dict
+    Mirrors ``poe_fuse.train._collate`` but carries a per-branch ``features`` dict
     (each ``(B, T_max, N, d)``) instead of raw ``images``; ``T`` is zero-padded
     to the batch max with a matching ``image_mask``.
     """

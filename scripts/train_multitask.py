@@ -225,7 +225,7 @@ def main() -> None:
         if _trunk_signature(b.cfg) != sig0:
             raise SystemExit(
                 f"trunk mismatch for task {b.key}: backbone/mamba3/fusion/mixer must "
-                f"match across all multitask configs (see configs/poe_fuse/multitask/)"
+                f"match across all configs listed in the tasks file"
             )
 
     for b in bundles:
