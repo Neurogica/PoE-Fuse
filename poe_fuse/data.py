@@ -260,8 +260,8 @@ def sanitize_bbox_response(text: str) -> str:
 
     The vendored TEOChat evaluator (``teochat_eval.detection.evaluate_masks``)
     assumes every bracketed group inside a response is a 4-tuple bbox and
-    crashes with ``IndexError`` on shorter / non-numeric brackets that the
-    a character-level text decoder can emit early in training.
+    crashes with ``IndexError`` on shorter / non-numeric brackets that a
+    character-level text decoder can emit early in training.
     """
 
     def _keep(m: re.Match[str]) -> str:

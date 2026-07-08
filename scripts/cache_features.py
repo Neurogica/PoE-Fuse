@@ -2,14 +2,14 @@
 
 The trio backbones (DINOv3 / SAM 3 / Gemma-4) are frozen, so their
 penultimate features can be computed once and reused every epoch.  This
-script materialises that cache; ``src/train.py --from-cache <dir>`` then
-trains the cheap, trainable part (projections + Mamba-3 + head) on it.
+script materialises that cache; ``scripts/train_multitask.py`` then trains
+the cheap, trainable part (projections + Mamba-3 + head) on it.
 
 Usage::
 
-    uv run scripts/cache_trio_features.py \
-        --config configs/poe_fuse/xbd_dmg_cls.yaml \
-        --out-dir /data/feat_cache/xbd_dmg_cls \
+    uv run scripts/cache_features.py \
+        --config configs/xbd_dmg_cls_head_poe_focal.yaml \
+        --out-dir feature_cache/xbd_dmg_cls \
         --split both --batch-size 8
 
 Produces ``<out-dir>/train/`` and/or ``<out-dir>/eval/`` directories that

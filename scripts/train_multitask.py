@@ -7,7 +7,7 @@ instruction-tuned VLM across tasks.
 
 Usage:
   python scripts/train_multitask.py \\
-    --tasks-file configs/poe_fuse/multitask/tasks.txt \\
+    --tasks-file configs/tasks_3_poe_focal.txt \\
     --epochs 30
 
 Or explicit triples ``key:config:cache_dir`` (see ``--tasks``).
@@ -177,7 +177,7 @@ def main() -> None:
     ap.add_argument(
         "--tasks-file",
         type=Path,
-        help="line-based task list (see configs/poe_fuse/multitask/tasks.txt)",
+        help="line-based task list (see configs/tasks_3_poe_focal.txt)",
     )
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--lr", type=float, default=5e-4)

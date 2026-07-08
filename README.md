@@ -35,7 +35,7 @@ fine-tuned), so the typical flow is: cache features once, then train / evaluate.
 
 ```bash
 # 1. Cache frozen features for a task (writes feature_cache/<task>/{train,eval})
-python scripts/cache_features.py --task s2_det --out-dir feature_cache/s2_det
+python scripts/cache_features.py --config configs/s2_seg_head_poe.yaml --out-dir feature_cache/s2_det
 
 # 2. Train the shared PoE-Fuse trunk on the three change-detection tasks
 python scripts/train_multitask.py \
