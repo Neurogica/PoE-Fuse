@@ -21,12 +21,8 @@ uv pip install -e .            # core (train / evaluate on cached features)
 uv pip install -e ".[features]"  # + extracting features from raw imagery
 ```
 
-The core package supports Python >= 3.10; use Python >= 3.11 when installing
-`[features]` (the upstream vision-ViT package requires it).
-
-Requires Linux with an NVIDIA GPU and the CUDA toolkit: the `mamba-ssm`
-dependency builds CUDA extensions at install time and does not build on
-CPU-only or macOS machines.
+Installation requires an NVIDIA GPU with the CUDA toolkit: `mamba-ssm`
+builds CUDA extensions at install time.
 
 Extracting features from raw imagery additionally requires the three frozen
 encoders. The vision ViT and segmentation model install from their upstream
