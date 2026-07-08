@@ -16,10 +16,13 @@ localization, and damage classification.
 ## Install
 
 ```bash
-uv venv --python 3.10 && source .venv/bin/activate
+uv venv --python 3.12 && source .venv/bin/activate
 uv pip install -e .            # core (train / evaluate on cached features)
 uv pip install -e ".[features]"  # + extracting features from raw imagery
 ```
+
+The core package supports Python >= 3.10; use Python >= 3.11 when installing
+`[features]` (the upstream vision-ViT package requires it).
 
 Requires Linux with an NVIDIA GPU and the CUDA toolkit: the `mamba-ssm`
 dependency builds CUDA extensions at install time and does not build on
