@@ -27,6 +27,7 @@ builds CUDA extensions at install time.
 Extracting features from raw imagery additionally requires the three frozen
 encoders. The vision ViT and segmentation model install from their upstream
 repositories (not on PyPI); the vision-language encoder loads via `transformers`.
+The segmentation model's package additionally requires `pycocotools`.
 
 ## Usage
 

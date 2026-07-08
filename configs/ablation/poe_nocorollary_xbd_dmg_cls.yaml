@@ -23,6 +23,7 @@ backbone:
   dinov3_repo_dir: models/dinov3_repo
   dinov3_arch: dinov3_vit7b16
   dinov3_weights: models/dinov3_vit7b16_pretrain_sat493m-a6675841.pth
+  dinov3_use_hf: false
   dinov3_hidden_size: 4096
   dinov3_n_tokens: 196
   sam3_model_dir: models/facebook/sam3

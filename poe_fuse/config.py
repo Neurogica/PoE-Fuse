@@ -32,11 +32,13 @@ class TrioBackboneConfig:
 
     # DINOv3 ViT-7B/16 (Meta satellite pretrain by default).
     #
-    # The Meta-native ``.pth`` checkpoint (``dinov3_weights``) is gated behind a
-    # signed download URL and is not redistributed via the HF Hub, so by default
-    # we load the equivalent ``transformers`` (``DINOv3ViTModel``) safetensors
-    # snapshot from ``dinov3_model_dir`` instead.  Set ``dinov3_use_hf=False`` to
-    # fall back to the original ``dinov3`` package + ``.pth`` path.
+    # Two DINOv3 load paths.  The shipped configs set ``dinov3_use_hf: false``
+    # and load the Meta-native ``dinov3`` package + ``.pth`` checkpoint
+    # (``dinov3_weights``) -- the asset ``scripts/download_backbones.py``
+    # fetches.  With ``dinov3_use_hf=True`` a ``transformers``
+    # (``DINOv3ViTModel``) safetensors snapshot is loaded from
+    # ``dinov3_model_dir`` instead; the download script does not create that
+    # snapshot, so bring your own.
     dinov3_repo_dir: str = "models/dinov3_repo"
     dinov3_arch: str = "dinov3_vit7b16"
     dinov3_weights: str = "models/dinov3_vit7b16_pretrain_sat493m-a6675841.pth"
