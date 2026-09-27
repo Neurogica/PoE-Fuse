@@ -1,0 +1,17 @@
+name: Lint
+
+# The package needs CUDA to build (mamba-ssm), so CI only lints; tests run on a GPU machine.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: ruff
+        run: uvx ruff check .

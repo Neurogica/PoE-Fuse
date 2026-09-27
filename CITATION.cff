@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below (preferred-citation) and, if useful, the software itself."
+title: "PoE-Fuse: Precision-Weighted Expert Fusion for Bi-Temporal Change Understanding"
+type: software
+version: 1.0.0
+date-released: 2026-09-27
+repository-code: "https://github.com/Neurogica/PoE-Fuse"
+license: BSD-3-Clause
+authors:
+  - family-names: Watase
+    given-names: Haruki
+    orcid: "https://orcid.org/0009-0008-4029-5735"
+    affiliation: "Neurogica Inc."
+  - family-names: Nagashima
+    given-names: Shunya
+    orcid: "https://orcid.org/0009-0007-9741-7628"
+    affiliation: "Neurogica Inc."
+  - family-names: Nishimura
+    given-names: Takayuki
+    orcid: "https://orcid.org/0009-0006-5261-5754"
+    affiliation: "Neurogica Inc."
+preferred-citation:
+  type: conference-paper
+  title: "PoE-Fuse: Precision-Weighted Expert Fusion for Bi-Temporal Change Understanding"
+  collection-title: "Proceedings of the Asian Conference on Computer Vision (ACCV)"
+  year: 2026
+  authors:
+    - family-names: Watase
+      given-names: Haruki
+    - family-names: Nagashima
+      given-names: Shunya
+    - family-names: Nishimura
+      given-names: Takayuki

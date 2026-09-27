@@ -1,0 +1,5 @@
+# Shared-trunk + PoE-Fuse: 3 CD tasks, one trunk.
+# Identical to tasks_3.txt but each config adds fusion.poe_fuse=true, poe_scale_init=0.1.
+xbd_dmg_cls:configs/xbd_dmg_cls_head_poe.yaml:feature_cache/xbd_dmg_cls
+s2_det:configs/s2_seg_head_poe.yaml:feature_cache/s2_det
+xbd_loc:configs/xbd_loc_seg_head_poe.yaml:feature_cache/xbd_loc

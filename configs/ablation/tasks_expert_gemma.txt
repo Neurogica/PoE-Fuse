@@ -1,0 +1,4 @@
+# ablation arm: expert_gemma
+s2_det:configs/ablation/expert_gemma_s2_det.yaml:feature_cache/s2_det
+xbd_loc:configs/ablation/expert_gemma_xbd_loc.yaml:feature_cache/xbd_loc
+xbd_dmg_cls:configs/ablation/expert_gemma_xbd_dmg_cls.yaml:feature_cache/xbd_dmg_cls
